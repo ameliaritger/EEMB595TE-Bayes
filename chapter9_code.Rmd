@@ -1,0 +1,194 @@
+---
+title: "Chapter 9 MCMC"
+author: "Stephen R. Proulx"
+date: "5/6/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+library(rethinking)
+```
+
+Load and process the rugged data
+```{r load_process_data}
+data(rugged)
+d <- as_tibble(rugged)
+
+
+# make log version of outcome and  extract countries with GDP data
+d <- d %>% 
+  mutate(log_gdp = log(rgdppc_2000))%>%
+  drop_na(rgdppc_2000) %>% 
+  mutate(log_gdp_std=log_gdp/mean(log_gdp), rugged_std = rugged/max(rugged) , cid= (cont_africa==1)*1 + (cont_africa==0)*2) %>%
+  select(log_gdp_std,rugged_std,cid)
+```
+
+
+
+```{r}
+## R code 9.14
+m9.1 <- ulam(
+    alist(
+        log_gdp_std ~ dnorm( mu , sigma ) ,
+        mu <- a[cid] + b[cid]*( rugged_std - 0.215 ) , #link function
+        a[cid] ~ dnorm( 1 , 0.1 ) ,
+        b[cid] ~ dnorm( 0 , 0.3 ) ,
+        sigma ~ dexp( 1 )
+    ) , data=d , chains=4 )
+
+
+show( m9.1 )
+
+## R code 9.15
+precis( m9.1 , depth=2 )
+```
+
+check the samples in more detail
+```{r}
+
+
+## R code 9.19
+pairs( m9.1 )
+
+## R code 9.20
+traceplot( m9.1 )
+
+## R code 9.21
+trankplot( m9.1 )
+
+
+```
+
+
+Run a model with very little data and a very flat prior
+```{r}
+## R code 9.22
+d <- tibble(y=c(-1,1))
+
+set.seed(11)
+m9.2 <- ulam(
+    alist(
+        y ~ dnorm( mu , sigma ) ,
+        mu <- alpha ,
+        alpha ~ dnorm( 0 , 1000 ) ,
+        sigma ~ dexp( 0.0001 )
+    ) , data=d , chains=8 , iter=5000)
+
+## R code 9.23
+precis( m9.2 )
+```
+Let's look more closely at what is going on here.
+```{r}
+pairs(m9.2@stanfit , pars=c("alpha","sigma", "lp__"))
+```
+```{r}
+
+
+traceplot( m9.2 )
+
+trankplot( m9.2 )
+
+```
+
+
+```{r}
+## R code 9.24
+set.seed(11)
+m9.3 <- ulam(
+    alist(
+        y ~ dnorm( mu , sigma ) ,
+        mu <- alpha ,
+        alpha ~ dnorm( 1 , 10 ) ,
+        sigma ~ dexp( 1 )
+    ) , data=d, chains=4 )
+precis( m9.3 )
+
+
+```
+
+Let's look more closely at what is going on here.
+```{r}
+pairs(m9.3@stanfit , pars=c("alpha","sigma"))
+```
+
+```{r}
+
+
+traceplot( m9.3 )
+
+trankplot( m9.3 )
+
+```
+
+
+A model that has non-identifiable parameters
+
+```{r}
+## R code 9.25
+set.seed(41)
+y <- rnorm( 100 , mean=0 , sd=1 )
+
+## R code 9.26
+set.seed(384)
+m9.4 <- ulam(
+    alist(
+        y ~ dnorm( mu , sigma ) ,
+        mu <- a1 + a2 ,
+        a1 ~ dnorm( 0 , 1000 ),
+        a2 ~ dnorm( 0 , 1000 ),
+        sigma ~ dexp( 1 )
+    ) , data=list(y=y) , chains=8,iter=2000 )
+precis( m9.4 )
+```
+```{r}
+pairs(m9.4@stanfit, pars=c("a1","a2","sigma"))
+
+traceplot( m9.4 )
+
+trankplot( m9.4 )
+```
+
+Even though this model has non-identifiable parameters, it gets the big picture correct.  
+```{r}
+post=as.data.frame(m9.4@stanfit) %>% mutate(asum=a1+a2) 
+mcmcpairs(select(post,asum,sigma) , pars=c("asum","sigma"))
+```
+
+
+Now run the same model but with more restrictive priors
+```{r}
+## R code 9.27
+m9.5 <- ulam(
+    alist(
+        y ~ dnorm( mu , sigma ) ,
+        mu <- a1 + a2 ,
+        a1 ~ dnorm( 0 , 10 ),
+        a2 ~ dnorm( 0 , 10 ),
+        sigma ~ dexp( 1 )
+    ) , data=list(y=y) , chains=3 )
+precis( m9.5 )
+
+```
+
+```{r}
+pairs(m9.5@stanfit, pars=c("a1","a2","sigma"))
+
+traceplot( m9.5 )
+
+trankplot( m9.5 )
+```
+
+Like before this still gets the total right.
+```{r}
+post=as.data.frame(m9.5@stanfit) %>% mutate(asum=a1+a2) 
+mcmcpairs(select(post,asum,sigma) )
+
+bayesplot::mcmc_areas(select(post,asum,sigma), area_method ="equal height",
+            prob=0.975)
+```

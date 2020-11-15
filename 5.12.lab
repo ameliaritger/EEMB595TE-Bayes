@@ -1,0 +1,87 @@
+---
+title: "Untitled"
+author: "Amelia Ritger"
+date: "5/21/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+rm(list = ls())
+
+library(tidyverse)
+library(rstan)
+rstan_options(auto_write = TRUE)
+options(mc.cores = parallel::detectCores())
+
+library(brms)
+library(bayesplot)
+
+library(rethinking)
+
+
+##NY Times dataset
+#The NY Times data on US Counties. Load the data, add a column which is days since January 21. Also loading the package lubridate (which you probably don't have installed) to help converting dates to days since pandemic. 
+
+
+
+library(lubridate)
+
+
+NYTimes_sheet<-read.csv("https://raw.githubusercontent.com/nytimes/covid-19-data/master/us-counties.csv")  
+
+
+county_data <-  NYTimes_sheet%>%
+  mutate(delta.days=period_to_seconds(days(ymd(date) - ymd(20200121)))/(60*60*24)) %>% #calculate days since data began being collected
+  as_tibble() 
+
+
+maxdays=max(county_data$delta.days)
+
+
+
+CAcountydata=filter(county_data, state=="California" , cases>=150  )  
+
+
+
+
+CAcountydata <-  CAcountydata %>%
+  arrange(county,delta.days)%>%
+  group_by(county) %>%
+  mutate(new_cases = cases - lag(cases) , new_cases=(new_cases>=0)*new_cases+0 ,
+         adj_days = delta.days-min(delta.days))  %>%
+  filter(adj_days>0) %>%
+  ungroup() %>%
+  mutate(county = as.character(county)) %>%
+  mutate(county = as.factor(county) , county_num = as.integer(county))%>%
+  filter(adj_days<=20)   #only data from the first 20 days
+
+
+
+
+
+
+ggplot(data=CAcountydata , aes(x=adj_days , y = log(cases,10) ,color=county,  group=county)) +
+  geom_line()+
+  labs( x="days since 13 cases" , y="log cases per county")+
+  theme_bw()+
+  theme( axis.text=element_text(family="Helvetica", size=8),text=element_text(family="Helvetica", size=12),legend.position = "none")
+
+
+ggplot(data=CAcountydata , aes(x=adj_days , y = new_cases ,color=county,  group=county)) +
+  geom_line()+
+  labs( x="days since 13 cases" , y="new cases per county")+
+  theme_bw()+
+  theme( axis.text=element_text(family="Helvetica", size=8),text=element_text(family="Helvetica", size=12),legend.position = "none")
+
+
+ggplot(data=CAcountydata , aes(x=log(cases,10) , y = log(new_cases,10)  ,color=county,  group=county)) +
+  geom_point()+
+  labs( x="log current cases" , y="log new cases")+
+  theme_bw()+
+  theme( axis.text=element_text(family="Helvetica", size=8),text=element_text(family="Helvetica", size=12),legend.position = "none")
+```
+

@@ -1,0 +1,99 @@
+---
+title: "hydroxychloroquine"
+author: "Amelia Ritger"
+date: "4/23/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,
+                      messages=FALSE)
+library(tidyverse)
+library(rethinking)
+```
+
+```{r}
+outcomes = tibble(treatment = c("HC","HC_AZ","None") , 
+                  death = c(27,25,18) , 
+                  discharge = c(70,88,140) , 
+                  coded_treatment = c(1,2,3))
+```
+
+1. wrangle data
+2. choose parameters and model and priors
+3. calculate and sample from posterior distribution
+4. do something - represent amount of posterior support for different parameters, posterior predictive plotting
+
+Given the treatment, what is the likelihood of death as an outcome?
+
+We have binomial outcomes/distribution
+```{r}
+#HC
+p_grid <- seq(from=0, to=1, length=1000) #define grid
+prior <- rep(1,1000) #define prior
+likelihood_HC <- dbinom(outcomes$death[outcomes$treatment=='HC'],
+                     size=sum(outcomes$death[outcomes$treatment=='HC'],
+                              outcomes$discharge[outcomes$treatment=='HC']),
+                     prob=p_grid) #compute likelihood at each value in grid
+posterior_HC <- likelihood_HC * prior / sum(likelihood_HC*prior) #standardize the posterior so it sums to 1
+
+hist(posterior_HC)
+
+draws <- sample(p_grid, prob=posterior_HC, replace=T, size=1000)
+quantile(draws,c(0.05, 0.95))
+HPDI(draws, prob=0.8)
+```
+
+
+```{r}
+#HC and AZ
+p_grid <- seq(from=0, to=1, length=1000) #define grid
+prior <- rep(1,1000) #define prior
+likelihood_AZ <- dbinom(outcomes$death[outcomes$treatment=="HC_AZ"],
+                     size=sum(outcomes$death[outcomes$treatment=="HC_AZ"],
+                              outcomes$discharge[outcomes$treatment=="HC_AZ"]),
+                     prob=p_grid) #compute likelihood at each value in grid
+posterior_AZ <- likelihood_AZ * prior / sum(likelihood_AZ*prior) #standardize the posterior so it sums to 1
+
+hist(posterior_AZ)
+```
+
+
+```{r}
+# None
+p_grid <- seq(from=0, to=1, length=1000) #define grid
+prior <- rep(1,1000) #define prior
+likelihood_none <- dbinom(outcomes$death[outcomes$treatment=="None"],
+                     size=sum(outcomes$death[outcomes$treatment=="None"],
+                              outcomes$discharge[outcomes$treatment=="None"]),
+                     prob=p_grid) #compute likelihood at each value in grid
+posterior_none <- likelihood_none * prior / sum(likelihood_none*prior) #standardize the posterior so it sums to 1
+
+hist(posterior_none)
+
+draws <- sample(p_grid, prob=posterior_none, replace=T, size=1000)
+quantile(draws,c(0.05, 0.95))
+HPDI(draws, prob=0.8)
+```
+
+
+```{r}
+#Together
+plot(p_grid, posterior_none)
+points(p_grid, posterior_HC, col="red")
+points(p_grid, posterior_AZ, col="blue")
+
+together <- data.frame(
+  "HC" = posterior_HC,
+  "HC_AZ" = posterior_AZ,
+  "None" = posterior_none
+)
+
+head(together)
+
+# #standardize posterior so it sums to 1
+# posterior_all <- (likelihood_HC * prior)*(likelihood_AZ * prior)*(likelihood_none * prior) / sum((likelihood_HC * prior)*(likelihood_AZ * prior)*(likelihood_none * prior))
+# 
+# points(p_grid, posterior_all, col="green")
+```
+
